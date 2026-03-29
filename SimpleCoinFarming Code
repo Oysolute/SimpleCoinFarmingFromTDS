@@ -1,0 +1,360 @@
+#NoEnv
+#SingleInstance, Force
+SendMode, Input
+SetWorkingDir, %A_ScriptDir%
+CoordMode, Mouse, Screen
+SetDefaultMouseSpeed, 2
+
+; ===== SETTINGS =====
+Global TargetWindowTitle := "ahk_class"
+Global WindowWidth := 800
+Global WindowHeight := 599
+Global ClickDelay := 1000
+Global FastClickDelay := 100
+
+; ===== VARIABLES =====
+Global ScriptActive := false
+Global WindowX := 0, WindowY := 0, WindowFound := false, WindowHWND := 0
+Global Stage2Active := false
+Global Stage2Index := 1
+Global DebugMode := true
+
+; ===== GUI SETTINGS =====
+Global AutoOpen := false
+Global EnableMods := false
+Global EnableSpeedup := false
+Global ModsSelected := []
+
+; ===== COORDINATES =====
+Block1 := [ [560,228], [961,712], [957,534], [889,551], [859,499] ]
+Block2 := [ [958,725], [1000,362], [994,318], [886,728] ]
+
+ModOpen := [621,765]
+ModVote := [1036,710]
+ModClose := [1074,398]
+ScrollStartX := 846
+ScrollStartY := 471
+ModGroups := [ { scrollY: 471, coords: [[891,474],[958,474],[1024,474],[891,544],[958,544],[1024,544]] }
+             , { scrollY: 516, coords: [[891,526],[958,526],[1024,526]] }
+             , { scrollY: 557, coords: [[891,474],[958,474],[1024,474],[891,544]] } ]
+
+SpeedupButton := [743,794]
+SpeedupConfirm := [957,624]
+
+; ===== FUNCTIONS =====
+LoadSettings() {
+    Global AutoOpen, EnableMods, EnableSpeedup, ModsSelected
+    IniRead, AutoOpen, settings.ini, General, AutoOpen, 0
+    IniRead, EnableMods, settings.ini, General, EnableMods, 0
+    IniRead, EnableSpeedup, settings.ini, General, EnableSpeedup, 0
+    Loop, 13 {
+        IniRead, val, settings.ini, Mods, mod_%A_Index%, 0
+        ModsSelected[A_Index] := (val = 1)
+    }
+}
+
+SaveSettings() {
+    Global AutoOpen, EnableMods, EnableSpeedup, ModsSelected
+    IniWrite, %AutoOpen%, settings.ini, General, AutoOpen
+    IniWrite, %EnableMods%, settings.ini, General, EnableMods
+    IniWrite, %EnableSpeedup%, settings.ini, General, EnableSpeedup
+    Loop, 13 {
+        IniWrite, % (ModsSelected[A_Index] ? 1 : 0), settings.ini, Mods, mod_%A_Index%
+    }
+}
+
+FindTargetWindow() {
+    Global WindowFound, WindowX, WindowY, WindowHWND, WindowWidth, WindowHeight, TargetWindowTitle
+    WindowFound := false
+    WinGet, windowsList, List, %TargetWindowTitle%
+    Loop, %windowsList% {
+        thisID := windowsList%A_Index%
+        WinGetPos, wx, wy, ww, wh, ahk_id %thisID%
+        if (Abs(ww - WindowWidth) < 3 && Abs(wh - WindowHeight) < 3) {
+            WindowX := wx
+            WindowY := wy
+            WindowHWND := thisID
+            WindowFound := true
+            break
+        }
+    }
+    if (!WindowFound) {
+        ToolTip, Window 800x599 not found! Clicking absolute coordinates., 0, 0
+        SetTimer, RemoveToolTip, -3000
+        WindowX := 0
+        WindowY := 0
+        WindowHWND := 0
+    }
+}
+
+ClickAt(relX, relY, delayAfter := 200, forceClick := false) {
+    Global WindowFound, WindowX, WindowY, WindowHWND, DebugMode
+    if (WindowFound && WindowHWND) {
+        WinActivate, ahk_id %WindowHWND%
+        WinWaitActive, ahk_id %WindowHWND%, , 2
+        Sleep, 200
+        x := WindowX + relX
+        y := WindowY + relY
+        if (DebugMode) {
+            ToolTip, % "Click: X=" x " Y=" y " (rel: " relX "," relY ")`nWindow: " WindowX "," WindowY, 0, 0
+            SetTimer, RemoveToolTip, -1500
+        }
+    } else {
+        x := relX
+        y := relY
+        if (DebugMode) {
+            ToolTip, % "Click (abs): X=" x " Y=" y, 0, 0
+            SetTimer, RemoveToolTip, -1500
+        }
+    }
+    MouseMove, x, y, 5
+    Sleep, 50
+    Click, left, 1
+    Sleep, delayAfter
+}
+
+ScrollTo(targetY) {
+    Global ScrollStartX, ScrollStartY, WindowFound, WindowX, WindowY, DebugMode
+    if (WindowFound) {
+        startX := WindowX + ScrollStartX
+        startY := WindowY + ScrollStartY
+        targetY_abs := WindowY + targetY
+        if (DebugMode) {
+            ToolTip, % "Scroll: from " startX "," startY " to " startX "," targetY_abs, 0, 0
+            SetTimer, RemoveToolTip, -1500
+        }
+    } else {
+        startX := ScrollStartX
+        startY := ScrollStartY
+        targetY_abs := targetY
+        if (DebugMode) {
+            ToolTip, % "Scroll (abs): from " startX "," startY " to " startX "," targetY_abs, 0, 0
+            SetTimer, RemoveToolTip, -1500
+        }
+    }
+    MouseMove, startX, startY, 5
+    Sleep, 100
+    MouseClickDrag, Left, startX, startY, startX, targetY_abs, 10
+    Sleep, 500
+}
+
+ApplyModifiers() {
+    Global ModsSelected, ModGroups, ModOpen, ModVote, ModClose, DebugMode
+    ToolTip, % "1. Opening modifiers window (" ModOpen[1] "," ModOpen[2] ")", 0, 0
+    ClickAt(ModOpen[1], ModOpen[2], 1500)
+    Sleep, 1000
+    ToolTip, Re-click to be sure..., 0, 0
+    ClickAt(ModOpen[1], ModOpen[2], 500)
+    Sleep, 1500
+    ToolTip, Window opened waiting 2 sec..., 0, 0
+    Sleep, 2000
+
+    groupIndex := 0
+    For idxGroup, group in ModGroups {
+        groupIndex++
+        ToolTip, % "Group " groupIndex " (scroll " group.scrollY ")", 0, 0
+        if (group.scrollY != 471) {
+            ScrollTo(group.scrollY)
+            Sleep, 1000
+        }
+        startIdx := 0
+        if (groupIndex = 1)
+            startIdx := 1, endIdx := 6
+        else if (groupIndex = 2)
+            startIdx := 7, endIdx := 9
+        else if (groupIndex = 3)
+            startIdx := 10, endIdx := 13
+        modIdxInGroup := 0
+        For i, coord in group.coords {
+            modIdxInGroup++
+            globalModIdx := startIdx + modIdxInGroup - 1
+            if (ModsSelected[globalModIdx]) {
+                ToolTip, % "Clicking mod #" globalModIdx " (" coord[1] "," coord[2] ")", 0, 0
+                ClickAt(coord[1], coord[2], 600)
+            }
+        }
+    }
+
+    ToolTip, % "Voting... (" ModVote[1] "," ModVote[2] ")", 0, 0
+    ClickAt(ModVote[1], ModVote[2], 1000)
+    ToolTip, % "Closing... (" ModClose[1] "," ModClose[2] ")", 0, 0
+    ClickAt(ModClose[1], ModClose[2], 800)
+    ToolTip, Modifiers applied, 0, 0
+    SetTimer, RemoveToolTip, -2000
+}
+
+DoSpeedup() {
+    Global SpeedupButton, SpeedupConfirm
+    ClickAt(SpeedupButton[1], SpeedupButton[2], 500)
+    ClickAt(SpeedupConfirm[1], SpeedupConfirm[2], 500)
+    ClickAt(SpeedupButton[1], SpeedupButton[2], 500)
+}
+
+Stage2Timer:
+    if (!Stage2Active || !ScriptActive) {
+        SetTimer, Stage2Timer, Off
+        return
+    }
+    coord := Block2[Stage2Index]
+    ClickAt(coord[1], coord[2], 0)
+    Stage2Index := (Stage2Index >= Block2.Length()) ? 1 : Stage2Index + 1
+return
+
+; ===== GUI (без функции, но с toggle) =====
+ShowGUI:
+    if WinExist("TDS Farm Settings") {
+        Gui, Destroy
+        return
+    }
+    Gui, New, , TDS Farm Settings
+    Gui, Color, 2E2E2E, 2E2E2E
+    Gui, Font, s10 cWhite, Segoe UI
+
+    Gui, Add, GroupBox, x10 y10 w330 h80, Main Settings
+    Gui, Add, CheckBox, x20 y30 vAutoOpen, Automatically open game on start (wait 3 min)
+    Gui, Add, CheckBox, x20 y55 vEnableMods, Enable Modifiers block
+    Gui, Add, CheckBox, x20 y80 vEnableSpeedup, Enable Speedup (Fast Forward)
+
+    Gui, Add, GroupBox, x10 y100 w330 h300, Modifiers (check to select)
+    ModNames := ["Hidden Enemies", "Glass", "Exploding Enemies", "Limitation Makes Creativity", "Committed", "Healthy Enemies", "Speedy Enemies", "Quarantine", "Fog", "Flying Enemies", "Broke", "Jailed Towers", "Inflation"]
+    Loop, 13 {
+        yPos := 120 + (A_Index-1)*22
+        Gui, Add, CheckBox, x20 y%yPos% vMod_%A_Index%, % ModNames[A_Index]
+    }
+
+    Gui, Font, s12 cWhite
+    Gui, Add, Button, x10 y420 w40 h30 gShowInfo, ⌂
+    Gui, Font, s10
+    Gui, Add, Button, x60 y420 w100 h30 gSaveAndClose, Save & Close
+    Gui, Add, Button, x170 y420 w100 h30 gCancel, Cancel
+
+    Gui, Font, s8 cGray
+    Gui, Add, Text, x10 y460 w330 Center, Hotkeys: F1 - Show menu | Home - Start/Stop | End - Exit | F2 - Mouse coords
+
+    LoadSettings()
+    GuiControl, , AutoOpen, %AutoOpen%
+    GuiControl, , EnableMods, %EnableMods%
+    GuiControl, , EnableSpeedup, %EnableSpeedup%
+    Loop, 13 {
+        GuiControl, , Mod_%A_Index%, % ModsSelected[A_Index]
+    }
+    Gui, Show, w350 h500
+return
+
+ShowInfo:
+    MsgBox, 64, About, This script automatically simulates clicks to help earn coins in the game Tower Defense Simulator.`n`nAuthor: Oysolute`nCreated with the assistance of AI.
+return
+
+SaveAndClose:
+    Gui, Submit, NoHide
+    AutoOpen := AutoOpen
+    EnableMods := EnableMods
+    EnableSpeedup := EnableSpeedup
+    ModsSelected := []
+    Loop, 13 {
+        ModsSelected[A_Index] := Mod_%A_Index%
+    }
+    SaveSettings()
+    Gui, Destroy
+return
+
+Cancel:
+    Gui, Destroy
+return
+
+; ===== MAIN LOOP =====
+MainLoop:
+    if (!ScriptActive)
+        return
+
+    For index, coord in Block1 {
+        if (!ScriptActive)
+            return
+        ClickAt(coord[1], coord[2], ClickDelay)
+    }
+
+    if (!ScriptActive)
+        return
+    if (EnableMods) {
+        ToolTip, Waiting 2 minutes before modifiers..., 0, 0
+        Loop, 120 {
+            Sleep, 1000
+            if (!ScriptActive) {
+                ToolTip
+                return
+            }
+        }
+        ToolTip
+        ApplyModifiers()
+    } else {
+        ToolTip, Waiting 20 seconds..., 0, 0
+        Loop, 20 {
+            Sleep, 1000
+            if (!ScriptActive) {
+                ToolTip
+                return
+            }
+        }
+        ToolTip
+    }
+
+    if (EnableSpeedup) {
+        DoSpeedup()
+    }
+
+    Stage2Active := true
+    Stage2Index := 1
+    SetTimer, Stage2Timer, %FastClickDelay%
+return
+
+; ===== HOTKEYS =====
+F1::
+    Gosub, ShowGUI
+return
+
+F2::
+    MouseGetPos, mouseX, mouseY
+    if (WindowFound && WindowHWND) {
+        WinGetPos, winX, winY, , , ahk_id %WindowHWND%
+        relX := mouseX - winX
+        relY := mouseY - winY
+        ToolTip, % "Abs: " mouseX "," mouseY "`nRel: " relX "," relY "`nWindow: " winX "," winY, 0, 0
+        SetTimer, RemoveToolTip, -3000
+    } else {
+        ToolTip, % "Abs: " mouseX "," mouseY "`nWindow not found", 0, 0
+        SetTimer, RemoveToolTip, -3000
+    }
+return
+
+Home::
+    if (!ScriptActive) {
+        LoadSettings()
+        ScriptActive := true
+        if (AutoOpen) {
+            Run, https://play-tds.paradoxum.gg/
+            ToolTip, Browser opened. Waiting 3 minutes...
+            SetTimer, RemoveToolTip, -2000
+            Sleep, 180000
+        }
+        FindTargetWindow()
+        ToolTip, Script started, 0, 0
+        SetTimer, RemoveToolTip, -2000
+        SetTimer, MainLoop, -10
+    } else {
+        ScriptActive := false
+        Stage2Active := false
+        SetTimer, Stage2Timer, Off
+        ToolTip, Script stopped, 0, 0
+        SetTimer, RemoveToolTip, -2000
+    }
+return
+
+End::ExitApp
+
+RemoveToolTip:
+    ToolTip
+return
+
+; ===== AUTO-OPEN GUI ON START =====
+Gosub, ShowGUI
+return
