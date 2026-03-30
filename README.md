@@ -1,4 +1,5 @@
-<img width="1041" height="68" alt="image" src="https://github.com/user-attachments/assets/03e70e57-77a4-4a8b-9876-8718a00ebdac" />
+<img width="1050" height="70" alt="image" src="https://github.com/user-attachments/assets/f65ac659-7cf4-469d-a129-4376859280c3" />
+
 
 
 # SimpleCoinFarmingFromTDS
